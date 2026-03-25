@@ -1,0 +1,307 @@
+# PullAI Python SDK
+
+[![PyPI version](https://img.shields.io/pypi/v/pullai.svg)](https://pypi.org/project/pullai/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+
+**Python SDK for [PullAI](https://github.com/pullai/pullai)** — run AI models locally on your machine.
+LLM · Image generation · Speech-to-Text · Text-to-Speech · Video generation · 3D.
+
+No cloud. No API keys. Your data never leaves your computer.
+
+---
+
+## Requirements
+
+1. Install PullAI: download `PullAI-Setup-x.x.x.exe` from the [releases page](https://github.com/pullai/pullai/releases)
+2. Start the server: `pullai serve`
+3. Install the SDK: `pip install pullai`
+
+---
+
+## Quick Start
+
+```python
+from pullai import PullAI
+
+ai = PullAI()           # connects to pullai serve on port 11500
+
+# Check what's installed
+ai.models()
+
+# Download a model
+ai.pull("llm/mistral:7b")
+```
+
+---
+
+## LLM — Text Generation
+
+```python
+# Single message — tokens printed in real time
+reply = ai.chat("llm/mistral:7b", "What is Python?")
+print(reply)
+
+# Multi-turn conversation (model remembers history)
+conv = ai.conversation("llm/mistral:7b")
+conv.say("My name is Marco.")
+conv.say("What is my name?")    # → "Your name is Marco."
+
+# Interactive REPL
+conv.start()   # type messages, 'clear' to reset, 'exit' to quit
+
+# With chain-of-thought reasoning (Qwen3, DeepSeek-R1, etc.)
+reply = ai.chat("llm/janhq--jan-code-4b-gguf:q3-k-s",
+                "Solve: 2x + 5 = 17", think=True)
+
+# Custom context window
+reply = ai.chat("llm/mistral:7b", "Very long document...", context_size=32768)
+
+# Continue existing conversation
+history = [
+    {"role": "user",      "content": "My favourite colour is blue."},
+    {"role": "assistant", "content": "Got it, blue!"},
+]
+reply = ai.chat("llm/mistral:7b", "What colour do I like?", history=history)
+```
+
+---
+
+## Real-Time Token Streaming
+
+Four ways to receive tokens as they are generated, without waiting for the full reply.
+
+### `on_token` callback
+
+```python
+# Collect tokens into a list
+tokens = []
+ai.chat("llm/mistral:7b", "Tell me a joke",
+        on_token=lambda t: tokens.append(t))
+reply = "".join(tokens)
+
+# Write tokens to a file in real time
+with open("output.txt", "w") as f:
+    ai.chat("llm/mistral:7b", "Write a poem",
+            on_token=lambda t: f.write(t))
+
+# Update a GUI label (e.g. Tkinter, PyQt)
+label_text = ""
+def update_label(token):
+    global label_text
+    label_text += token
+    my_label.config(text=label_text)   # Tkinter
+
+ai.chat("llm/mistral:7b", "Hello!", on_token=update_label)
+
+# Same for Conversation
+conv = ai.conversation("llm/mistral:7b")
+conv.say("Explain recursion", on_token=lambda t: print(t, end="", flush=True))
+```
+
+### `stream()` generator
+
+```python
+# Iterate token by token
+for token in ai.stream("llm/mistral:7b", "Tell me a story"):
+    print(token, end="", flush=True)
+print()
+
+# Works with conversations too
+conv = ai.conversation("llm/mistral:7b")
+for token in conv.stream("What is Python?"):
+    print(token, end="", flush=True)
+print()
+```
+
+### Flask — streaming HTTP endpoint
+
+```python
+from flask import Flask, Response, stream_with_context, request
+from pullai import PullAI
+import json
+
+app = Flask(__name__)
+ai  = PullAI()
+
+@app.route("/chat")
+def chat():
+    prompt = request.args.get("q", "Hello!")
+    def generate():
+        for token in ai.stream("llm/mistral:7b", prompt):
+            yield f"data: {json.dumps(token)}\n\n"
+        yield "data: [DONE]\n\n"
+    return Response(stream_with_context(generate()),
+                    content_type="text/event-stream")
+```
+
+### FastAPI — async streaming endpoint
+
+```python
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pullai import PullAI
+import asyncio, json
+
+app = FastAPI()
+ai  = PullAI()
+
+@app.get("/chat")
+async def chat(q: str = "Hello!"):
+    loop = asyncio.get_event_loop()
+
+    def gen():
+        for token in ai.stream("llm/mistral:7b", q):
+            yield f"data: {json.dumps(token)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+```
+
+### Silent mode (no terminal output)
+
+```python
+# Suppress output, just return the string
+reply = ai.chat("llm/mistral:7b", "Hello!", silent=True)
+print("Got:", reply)
+```
+
+---
+
+## Image Generation
+
+```python
+# Generate image from text
+ai.image("image/sdxl",          "a purple sunset over the ocean", "sunset.png")
+ai.image("image/flux:schnell",  "medieval castle",                "castle.png", steps=30)
+ai.image("image/dreamshaper",   "portrait of a knight",           "knight.png")
+ai.image("image/openjourney",   "futuristic city at night",       "city.png")
+```
+
+---
+
+## Audio — Speech-to-Text (Whisper)
+
+```python
+# Transcribe audio to text
+text = ai.transcribe("audio/whisper:large", "meeting.mp3")
+print(text)
+
+# Save transcript to file
+ai.transcribe("audio/whisper:base", "recording.wav", save_to="transcript.txt")
+```
+
+---
+
+## Audio — Text-to-Speech
+
+```python
+ai.speak("audio/kokoro", "Hello! I am PullAI.",              "greeting.wav")
+ai.speak("audio/bark",   "Welcome to the future of local AI!", "welcome.wav")
+```
+
+---
+
+## Video Generation
+
+```python
+ai.video("video/wan:1.3b",       "a cat flying through the sky",  "cat.mp4")
+ai.video("video/animatediff:v3", "ocean waves on a beach",        "ocean.mp4", steps=30)
+ai.video("video/cogvideo:5b",    "a horse galloping in a field",  "horse.mp4")
+```
+
+---
+
+## 3D Model Generation
+
+```python
+# From text description
+ai.model3d("3d/shap-e",  "chair.ply", description="a wooden chair with four legs")
+
+# From image (image → 3D mesh)
+ai.model3d("3d/triposr", "chair.obj", image="photo.jpg")
+```
+
+---
+
+## Server Status
+
+```python
+info = ai.status()
+print(info["version"])   # "0.3.37"
+print(info["hardware"])  # "CUDA (GPU 0: RTX 3080, 10 GB VRAM)"
+print(info["model_count"])
+```
+
+---
+
+## Download Models
+
+```python
+# Download from registry
+ai.pull("llm/mistral:7b")
+ai.pull("image/sdxl:latest")
+ai.pull("audio/whisper:base")
+
+# Download with progress callback
+ai.pull("llm/llama3:8b", on_progress=lambda pct, msg: print(f"{pct}% — {msg}"))
+
+# Download from HuggingFace directly
+ai.pull("llm/hf.co/unsloth/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M")
+ai.pull("llm/https://huggingface.co/HumeAI/tada-1b")
+```
+
+---
+
+## Custom Port
+
+```python
+ai = PullAI(port=8080)   # if server started with: pullai serve --port 8080
+```
+
+---
+
+## Error Handling
+
+```python
+from pullai import PullAI
+
+ai = PullAI()
+
+try:
+    reply = ai.chat("llm/mistral:7b", "Hello!")
+except ConnectionError:
+    print("Server not running. Start with: pullai serve")
+except RuntimeError as e:
+    print(f"Generation error: {e}")
+```
+
+---
+
+## Full API Reference
+
+| Method | Description |
+|--------|-------------|
+| `ai.status()` | Server status (version, hardware, model count) |
+| `ai.models()` | List installed models |
+| `ai.pull(model, on_progress)` | Download a model |
+| `ai.chat(model, message, *, on_token, silent, think, context_size, history)` | Single LLM message — streams tokens |
+| `ai.stream(model, message, *, think, history)` | **Generator** — yields one token at a time |
+| `ai.conversation(model, system)` | Multi-turn conversation object |
+| `conv.say(message, *, on_token, silent, think)` | Send message in conversation — streams tokens |
+| `conv.stream(message, *, think)` | **Generator** — yields tokens, updates history |
+| `conv.start()` | Interactive terminal REPL |
+| `conv.clear()` | Reset conversation history |
+| `ai.image(model, desc, save_to, steps)` | Generate image |
+| `ai.transcribe(model, audio_file, save_to)` | Speech-to-text |
+| `ai.speak(model, text, save_to)` | Text-to-speech |
+| `ai.video(model, desc, save_to, steps)` | Generate video |
+| `ai.model3d(model, save_to, desc, image)` | Generate 3D mesh |
+
+---
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE).
+
+Made by **Metiu** with ❤️
