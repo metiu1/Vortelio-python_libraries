@@ -1,0 +1,42 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name        = "vortelio"
+version     = "6.0.5"
+description = "Python SDK for Vortelio — run AI models locally (LLM, Image, Audio, Video, 3D)"
+readme      = "README.md"
+license     = { text = "Apache-2.0" }
+authors     = [{ name = "Metiu" }]
+keywords    = ["ai", "llm", "local", "ollama", "llama", "stable-diffusion", "whisper", "tts", "video"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.8"
+dependencies    = []          # zero dependencies — pure stdlib
+
+[project.urls]
+Homepage    = "https://github.com/vortelio/vortelio"
+Repository  = "https://github.com/vortelio/vortelio"
+"Bug Tracker" = "https://github.com/vortelio/vortelio/issues"
+
+[project.scripts]
+# No CLI scripts — the vortelio.exe binary is separate
+
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["vortelio*"]
+
+[tool.setuptools.package-data]
+vortelio = ["py.typed"]

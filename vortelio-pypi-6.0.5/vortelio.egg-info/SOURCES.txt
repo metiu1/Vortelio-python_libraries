@@ -1,0 +1,12 @@
+LICENSE
+MANIFEST.in
+README.md
+pyproject.toml
+vortelio/__init__.py
+vortelio/client.py
+vortelio/py.typed
+vortelio/setup.py
+vortelio.egg-info/PKG-INFO
+vortelio.egg-info/SOURCES.txt
+vortelio.egg-info/dependency_links.txt
+vortelio.egg-info/top_level.txt
