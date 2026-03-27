@@ -1,14 +1,11 @@
-include README.md
-include LICENSE
-include pullai/py.typed
-[README.md](https://github.com/user-attachments/files/26252559/README.md)
-# PullAI Python SDK
+[README.md](https://github.com/user-attachments/files/26309737/README.md)
+# Vortelio Python SDK
 
-[![PyPI version](https://img.shields.io/pypi/v/pullai.svg)](https://pypi.org/project/pullai/)
+[![PyPI version](https://img.shields.io/pypi/v/vortelio.svg)](https://pypi.org/project/vortelio/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
-**Python SDK for [PullAI](https://github.com/pullai/pullai)** — run AI models locally on your machine.
+**Python SDK for [Vortelio](https://github.com/vortelio/vortelio)** — run AI models locally on your machine.
 LLM · Image generation · Speech-to-Text · Text-to-Speech · Video generation · 3D.
 
 No cloud. No API keys. Your data never leaves your computer.
@@ -17,18 +14,18 @@ No cloud. No API keys. Your data never leaves your computer.
 
 ## Requirements
 
-1. Install PullAI: download `PullAI-Setup-x.x.x.exe` from the [releases page](https://github.com/pullai/pullai/releases)
-2. Start the server: `pullai serve`
-3. Install the SDK: `pip install pullai`
+1. Install Vortelio: download `Vortelio-Setup-x.x.x.exe` from the [releases page](https://github.com/vortelio/vortelio/releases)
+2. Start the server: `vortelio serve`
+3. Install the SDK: `pip install vortelio`
 
 ---
 
 ## Quick Start
 
 ```python
-from pullai import PullAI
+from vortelio import Vortelio
 
-ai = PullAI()           # connects to pullai serve on port 11500
+ai = Vortelio()           # connects to vortelio serve on port 11500
 
 # Check what's installed
 ai.models()
@@ -122,11 +119,11 @@ print()
 
 ```python
 from flask import Flask, Response, stream_with_context, request
-from pullai import PullAI
+from vortelio import Vortelio
 import json
 
 app = Flask(__name__)
-ai  = PullAI()
+ai  = Vortelio()
 
 @app.route("/chat")
 def chat():
@@ -144,11 +141,11 @@ def chat():
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from pullai import PullAI
+from vortelio import Vortelio
 import asyncio, json
 
 app = FastAPI()
-ai  = PullAI()
+ai  = Vortelio()
 
 @app.get("/chat")
 async def chat(q: str = "Hello!"):
@@ -200,7 +197,7 @@ ai.transcribe("audio/whisper:base", "recording.wav", save_to="transcript.txt")
 ## Audio — Text-to-Speech
 
 ```python
-ai.speak("audio/kokoro", "Hello! I am PullAI.",              "greeting.wav")
+ai.speak("audio/kokoro", "Hello! I am Vortelio.",              "greeting.wav")
 ai.speak("audio/bark",   "Welcome to the future of local AI!", "welcome.wav")
 ```
 
@@ -260,7 +257,7 @@ ai.pull("llm/https://huggingface.co/HumeAI/tada-1b")
 ## Custom Port
 
 ```python
-ai = PullAI(port=8080)   # if server started with: pullai serve --port 8080
+ai = Vortelio(port=8080)   # if server started with: vortelio serve --port 8080
 ```
 
 ---
@@ -268,14 +265,14 @@ ai = PullAI(port=8080)   # if server started with: pullai serve --port 8080
 ## Error Handling
 
 ```python
-from pullai import PullAI
+from vortelio import Vortelio
 
-ai = PullAI()
+ai = Vortelio()
 
 try:
     reply = ai.chat("llm/mistral:7b", "Hello!")
 except ConnectionError:
-    print("Server not running. Start with: pullai serve")
+    print("Server not running. Start with: vortelio serve")
 except RuntimeError as e:
     print(f"Generation error: {e}")
 ```
