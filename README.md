@@ -1,22 +1,38 @@
-[README.md](https://github.com/user-attachments/files/26309737/README.md)
 # Vortelio Python SDK
 
 [![PyPI version](https://img.shields.io/pypi/v/vortelio.svg)](https://pypi.org/project/vortelio/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 
-**Python SDK for [Vortelio](https://github.com/vortelio/vortelio)** — run AI models locally on your machine.
-LLM · Image generation · Speech-to-Text · Text-to-Speech · Video generation · 3D.
+Official Python client for [Vortelio](https://github.com/metiu1/Vortelio) — run LLMs, generate images, audio, video, and 3D models locally.
 
-No cloud. No API keys. Your data never leaves your computer.
+Zero external dependencies. Fully OpenAI API and Ollama API compatible.
+
+```bash
+pip install vortelio
+```
+
+For async support:
+```bash
+pip install "vortelio[async]"   # adds aiohttp
+```
 
 ---
 
-## Requirements
+## Prerequisites
 
-1. Install Vortelio: download `Vortelio-Setup-x.x.x.exe` from the [releases page](https://github.com/vortelio/vortelio/releases)
-2. Start the server: `vortelio serve`
-3. Install the SDK: `pip install vortelio`
+Start the Vortelio server first:
+
+```bash
+vortelio serve          # default port 11500
+```
+
+Or let the SDK auto-start it:
+
+```python
+from vortelio import ensure_server
+ensure_server()          # finds and starts vortelio if installed
+```
 
 ---
 
@@ -25,284 +41,284 @@ No cloud. No API keys. Your data never leaves your computer.
 ```python
 from vortelio import Vortelio
 
-ai = Vortelio()           # connects to vortelio serve on port 11500
-
-# Check what's installed
-ai.models()
+ai = Vortelio()          # connects to http://localhost:11500
 
 # Download a model
 ai.pull("llm/mistral:7b")
-```
 
----
+# Chat — streams tokens to stdout, returns full reply
+reply = ai.chat("llm/mistral:7b", "What is quantum computing?")
 
-## LLM — Text Generation
-
-```python
-# Single message — tokens printed in real time
-reply = ai.chat("llm/mistral:7b", "What is Python?")
-print(reply)
-
-# Multi-turn conversation (model remembers history)
-conv = ai.conversation("llm/mistral:7b")
-conv.say("My name is Marco.")
-conv.say("What is my name?")    # → "Your name is Marco."
-
-# Interactive REPL
-conv.start()   # type messages, 'clear' to reset, 'exit' to quit
-
-# With chain-of-thought reasoning (Qwen3, DeepSeek-R1, etc.)
-reply = ai.chat("llm/janhq--jan-code-4b-gguf:q3-k-s",
-                "Solve: 2x + 5 = 17", think=True)
-
-# Custom context window
-reply = ai.chat("llm/mistral:7b", "Very long document...", context_size=32768)
-
-# Continue existing conversation
-history = [
-    {"role": "user",      "content": "My favourite colour is blue."},
-    {"role": "assistant", "content": "Got it, blue!"},
-]
-reply = ai.chat("llm/mistral:7b", "What colour do I like?", history=history)
-```
-
----
-
-## Real-Time Token Streaming
-
-Four ways to receive tokens as they are generated, without waiting for the full reply.
-
-### `on_token` callback
-
-```python
-# Collect tokens into a list
-tokens = []
-ai.chat("llm/mistral:7b", "Tell me a joke",
-        on_token=lambda t: tokens.append(t))
-reply = "".join(tokens)
-
-# Write tokens to a file in real time
-with open("output.txt", "w") as f:
-    ai.chat("llm/mistral:7b", "Write a poem",
-            on_token=lambda t: f.write(t))
-
-# Update a GUI label (e.g. Tkinter, PyQt)
-label_text = ""
-def update_label(token):
-    global label_text
-    label_text += token
-    my_label.config(text=label_text)   # Tkinter
-
-ai.chat("llm/mistral:7b", "Hello!", on_token=update_label)
-
-# Same for Conversation
-conv = ai.conversation("llm/mistral:7b")
-conv.say("Explain recursion", on_token=lambda t: print(t, end="", flush=True))
-```
-
-### `stream()` generator
-
-```python
-# Iterate token by token
-for token in ai.stream("llm/mistral:7b", "Tell me a story"):
-    print(token, end="", flush=True)
-print()
-
-# Works with conversations too
-conv = ai.conversation("llm/mistral:7b")
-for token in conv.stream("What is Python?"):
+# Generator streaming
+for token in ai.chat_stream("llm/mistral:7b", "Tell me a story"):
     print(token, end="", flush=True)
 print()
 ```
 
-### Flask — streaming HTTP endpoint
+---
+
+## Chat & Conversations
 
 ```python
-from flask import Flask, Response, stream_with_context, request
-from vortelio import Vortelio
-import json
+# Simple chat
+reply = ai.chat("llm/mistral:7b", "Hello!")
 
-app = Flask(__name__)
-ai  = Vortelio()
+# With messages list (Ollama/OpenAI format)
+reply = ai.chat("llm/mistral:7b", [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user",   "content": "What is 2 + 2?"},
+])
 
-@app.route("/chat")
-def chat():
-    prompt = request.args.get("q", "Hello!")
-    def generate():
-        for token in ai.stream("llm/mistral:7b", prompt):
-            yield f"data: {json.dumps(token)}\n\n"
-        yield "data: [DONE]\n\n"
-    return Response(stream_with_context(generate()),
-                    content_type="text/event-stream")
-```
+# Stateful multi-turn conversation
+conv = ai.conversation("llm/mistral:7b", system="You are a pirate.")
+conv.say("What is your name?")
+reply = conv.say("Where do you sail?")
 
-### FastAPI — async streaming endpoint
-
-```python
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
-from vortelio import Vortelio
-import asyncio, json
-
-app = FastAPI()
-ai  = Vortelio()
-
-@app.get("/chat")
-async def chat(q: str = "Hello!"):
-    loop = asyncio.get_event_loop()
-
-    def gen():
-        for token in ai.stream("llm/mistral:7b", q):
-            yield f"data: {json.dumps(token)}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
-```
-
-### Silent mode (no terminal output)
-
-```python
-# Suppress output, just return the string
-reply = ai.chat("llm/mistral:7b", "Hello!", silent=True)
-print("Got:", reply)
+# Streaming from a conversation
+for tok in conv.stream("Tell me about treasure"):
+    print(tok, end="", flush=True)
 ```
 
 ---
 
-## Image Generation
+## Generate (Ollama-style)
 
 ```python
-# Generate image from text
-ai.image("image/sdxl",          "a purple sunset over the ocean", "sunset.png")
-ai.image("image/flux:schnell",  "medieval castle",                "castle.png", steps=30)
-ai.image("image/dreamshaper",   "portrait of a knight",           "knight.png")
-ai.image("image/openjourney",   "futuristic city at night",       "city.png")
+# Non-streaming
+result = ai.generate("llm/mistral:7b", "The capital of France is")
+print(result["response"])
+
+# Streaming generator
+for tok in ai.generate_stream("llm/mistral:7b", "Count to 10"):
+    print(tok, end="", flush=True)
+
+# With options
+result = ai.generate(
+    "llm/mistral:7b",
+    "Explain photosynthesis",
+    system="You are a biology teacher.",
+    options={"temperature": 0.7, "num_ctx": 4096},
+    think=True,   # chain-of-thought with <think> models
+)
+print(result.get("thinking", ""))
+print(result["response"])
 ```
 
 ---
 
-## Audio — Speech-to-Text (Whisper)
+## Embeddings
 
 ```python
-# Transcribe audio to text
-text = ai.transcribe("audio/whisper:large", "meeting.mp3")
-print(text)
+# Batch embeddings
+vecs = ai.embed("llm/nomic-embed-text:latest", ["Hello", "World"])
+# → [[0.1, 0.2, ...], [0.3, 0.4, ...]]
 
-# Save transcript to file
-ai.transcribe("audio/whisper:base", "recording.wav", save_to="transcript.txt")
+# Legacy single-prompt
+vec = ai.embeddings("llm/nomic-embed-text:latest", "Hello world")
 ```
 
 ---
 
-## Audio — Text-to-Speech
+## RAG (Retrieval-Augmented Generation)
 
 ```python
-ai.speak("audio/kokoro", "Hello! I am Vortelio.",              "greeting.wav")
-ai.speak("audio/bark",   "Welcome to the future of local AI!", "welcome.wav")
+# Ingest documents
+ai.rag_ingest(
+    "llm/nomic-embed-text:latest",
+    [
+        {"text": "Paris is the capital of France.", "meta": {"source": "facts"}},
+        {"text": "Berlin is the capital of Germany.", "meta": {"source": "facts"}},
+    ],
+    collection="my-docs",
+)
+
+# Query
+hits = ai.rag_query("llm/nomic-embed-text:latest", "capital of France", collection="my-docs")
+for h in hits["results"]:
+    print(f"[{h['score']:.3f}] {h['text']}")
 ```
 
 ---
 
-## Video Generation
+## Model Management
 
 ```python
-ai.video("video/wan:1.3b",       "a cat flying through the sky",  "cat.mp4")
-ai.video("video/animatediff:v3", "ocean waves on a beach",        "ocean.mp4", steps=30)
-ai.video("video/cogvideo:5b",    "a horse galloping in a field",  "horse.mp4")
+ai.models()                         # list all downloaded models
+ai.pull("llm/llama3:8b")            # download from HuggingFace
+ai.show("llm/mistral:7b")           # model details, template, capabilities
+ai.delete("llm/old-model:latest")   # remove a model
+ai.copy("llm/mistral:7b", "llm/my-mistral:latest")  # duplicate
+ai.quantize("llm/mistral:7b", "q4_k_m")             # quantize
+ai.create("llm/my-model:latest", from_model="llm/mistral:7b",
+          system="You are a helpful assistant.")
+ai.ps()                             # currently loaded models
+ai.version()                        # server version
 ```
 
 ---
 
-## 3D Model Generation
+## Media Generation
 
 ```python
-# From text description
-ai.model3d("3d/shap-e",  "chair.ply", description="a wooden chair with four legs")
+# Image
+ai.image("image/sdxl:latest", "a red panda on the moon", "panda.png")
 
-# From image (image → 3D mesh)
-ai.model3d("3d/triposr", "chair.obj", image="photo.jpg")
+# Or get bytes directly
+png_bytes = ai.generate_image("image/sdxl:latest", "sunset over mountains")
+
+# Audio (TTS / music)
+wav_bytes = ai.generate_audio("audio/kokoro:latest", "Hello, this is a test.")
+
+# Video
+mp4_bytes = ai.generate_video("video/wan2-1:latest", "a cat playing piano")
+
+# 3D
+obj_bytes = ai.generate_3d("3d/triposr:latest", "a wooden chair")
 ```
 
 ---
 
-## Server Status
+## Advanced API
 
 ```python
-info = ai.status()
-print(info["version"])   # "0.3.37"
-print(info["hardware"])  # "CUDA (GPU 0: RTX 3080, 10 GB VRAM)"
-print(info["model_count"])
+# A/B compare models
+result = ai.compare(
+    ["llm/mistral:7b", "llm/llama3:8b"],
+    "Explain gravity in one sentence.",
+)
+for r in result["results"]:
+    print(f"{r['model']}: {r['response']}")
+
+# Structured JSON output
+result = ai.structured(
+    "llm/mistral:7b",
+    "List 3 programming languages",
+    schema={"type": "array", "items": {"type": "string"}},
+)
+print(result["parsed"])
+
+# Long-text summarization (map-reduce)
+summary = ai.summarize("llm/mistral:7b", very_long_text, style="bullets")
+print(summary["summary"])
+
+# Chain-of-thought
+result = ai.think("llm/qwq:32b", "Is 97 a prime number?")
+print("Reasoning:", result["thinking"])
+print("Answer:", result["answer"])
+
+# Smart model router
+best = ai.route("code", prompt="Write a sorting algorithm")
+print("Best model:", best["model"])
 ```
 
 ---
 
-## Download Models
+## OpenAI-Compatible API
 
 ```python
-# Download from registry
-ai.pull("llm/mistral:7b")
-ai.pull("image/sdxl:latest")
-ai.pull("audio/whisper:base")
+# Drop-in OpenAI replacement
+response = ai.openai_chat(
+    "mistral:7b",
+    [{"role": "user", "content": "Hello!"}],
+    temperature=0.7,
+)
+print(response["choices"][0]["message"]["content"])
 
-# Download with progress callback
-ai.pull("llm/llama3:8b", on_progress=lambda pct, msg: print(f"{pct}% — {msg}"))
+# Streaming
+for tok in ai.openai_chat_stream("mistral:7b", [{"role":"user","content":"Hi"}]):
+    print(tok, end="", flush=True)
 
-# Download from HuggingFace directly
-ai.pull("llm/hf.co/unsloth/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M")
-ai.pull("llm/https://huggingface.co/HumeAI/tada-1b")
+# Embeddings (OpenAI format)
+result = ai.openai_embeddings("nomic-embed-text:latest", "Hello world")
 ```
 
 ---
 
-## Custom Port
+## Async Client
 
 ```python
-ai = Vortelio(port=8080)   # if server started with: vortelio serve --port 8080
+import asyncio
+from vortelio import AsyncVortelio
+
+async def main():
+    ai = AsyncVortelio()
+
+    # All methods are async
+    reply = await ai.chat("llm/mistral:7b", "Hello!")
+
+    # Async streaming
+    async for tok in ai.chat_stream("llm/mistral:7b", "Tell me a joke"):
+        print(tok, end="", flush=True)
+
+    # Async conversation
+    conv = ai.conversation("llm/mistral:7b", system="You are helpful.")
+    reply = await conv.say("My name is Alice.")
+
+asyncio.run(main())
 ```
 
 ---
 
-## Error Handling
+## Agents
 
 ```python
-from vortelio import Vortelio
+# List available agents (Open WebUI, OpenClaw, CrewAI, AnythingLLM, ...)
+catalog = ai.agents_catalog()
 
-ai = Vortelio()
+# Install and start an agent
+ai.agents_install("open-webui")
+ai.agents_start("open-webui")
 
-try:
-    reply = ai.chat("llm/mistral:7b", "Hello!")
-except ConnectionError:
-    print("Server not running. Start with: vortelio serve")
-except RuntimeError as e:
-    print(f"Generation error: {e}")
+# Stop an agent
+ai.agents_stop("open-webui")
 ```
 
 ---
 
-## Full API Reference
+## Webhooks & Audit
 
-| Method | Description |
-|--------|-------------|
-| `ai.status()` | Server status (version, hardware, model count) |
-| `ai.models()` | List installed models |
-| `ai.pull(model, on_progress)` | Download a model |
-| `ai.chat(model, message, *, on_token, silent, think, context_size, history)` | Single LLM message — streams tokens |
-| `ai.stream(model, message, *, think, history)` | **Generator** — yields one token at a time |
-| `ai.conversation(model, system)` | Multi-turn conversation object |
-| `conv.say(message, *, on_token, silent, think)` | Send message in conversation — streams tokens |
-| `conv.stream(message, *, think)` | **Generator** — yields tokens, updates history |
-| `conv.start()` | Interactive terminal REPL |
-| `conv.clear()` | Reset conversation history |
-| `ai.image(model, desc, save_to, steps)` | Generate image |
-| `ai.transcribe(model, audio_file, save_to)` | Speech-to-text |
-| `ai.speak(model, text, save_to)` | Text-to-speech |
-| `ai.video(model, desc, save_to, steps)` | Generate video |
-| `ai.model3d(model, save_to, desc, image)` | Generate 3D mesh |
+```python
+# Register a webhook
+ai.hooks_create("https://my-server.com/webhook", event="generate")
+
+# List webhooks
+ai.hooks_list()
+
+# Audit log
+entries = ai.audit(limit=50)
+```
+
+---
+
+## GGUF Inspect & Ollama Import
+
+```python
+# Inspect a local GGUF file
+info = ai.gguf_inspect("/path/to/model.gguf")
+
+# Import models from a local Ollama installation
+ai.import_ollama()   # imports all
+ai.import_ollama(["mistral:7b", "llama3:8b"])  # selective
+```
+
+---
+
+## Custom Port / Remote Server
+
+```python
+ai = Vortelio(host="http://192.168.1.100", port=11500)
+ai = Vortelio(port=8080)               # local custom port
+ai = Vortelio(timeout=600)             # longer timeout for large models
+```
+
+---
+
+## Server Version Compatibility
+
+This SDK version **0.3.49** requires Vortelio server **≥ 0.3.38**.
 
 ---
 
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
-
-Made by **Metiu** with ❤️
